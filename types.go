@@ -361,6 +361,8 @@ func (c Chat) ChatConfig() ChatConfig {
 type Message struct {
 	// MessageID is a unique message identifier inside this chat
 	MessageID int `json:"message_id"`
+	//Unique identifier of the forum topic
+	MessageThreadID int `json:"message_thread_id,omitempty"`
 	// From is a sender, empty for messages sent to channels;
 	//
 	// optional
@@ -634,6 +636,8 @@ type Message struct {
 	//
 	// optional
 	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ExternalReply json.RawMessage `json:"external_reply,omitempty"`
+	Quote         json.RawMessage `json:"quote,omitempty"`
 }
 
 // Time converts the message timestamp into a Time.
