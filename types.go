@@ -1430,6 +1430,10 @@ type InlineKeyboardButton struct {
 	//
 	// optional
 	Pay bool `json:"pay,omitempty"`
+	// NOTE:
+	// Style style of the button
+	// optional
+	Style string `json:"style,omitempty"`
 }
 
 // LoginURL represents a parameter of the inline keyboard button used to
