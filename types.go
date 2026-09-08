@@ -421,6 +421,14 @@ type Message struct {
 	//
 	// optional
 	ViaBot *User `json:"via_bot,omitempty"`
+	// GuestBotCallerUser is the user whose original message triggered a guest bot's response
+	//
+	// optional
+	GuestBotCallerUser *User `json:"guest_bot_caller_user,omitempty"`
+	// GuestBotCallerChat is the chat whose original message triggered a guest bot's response
+	//
+	// optional
+	GuestBotCallerChat *Chat `json:"guest_bot_caller_chat,omitempty"`
 	// EditDate of the message was last edited in Unix time;
 	//
 	// optional
