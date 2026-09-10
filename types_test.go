@@ -58,6 +58,52 @@ func TestRichMessageUnmarshal(t *testing.T) {
 	}
 }
 
+func TestRichMessageUnmarshalNestedTextFragments(t *testing.T) {
+	payload := []byte(`{
+		"message_id":24,
+		"date":1789033385,
+		"chat":{"id":-1004326400304,"type":"supergroup"},
+		"rich_message":{"blocks":[{
+			"type":"text",
+			"text":{"type":"rich_text","text":[
+				{"type":"plain","text":"hello "},
+				{"type":"mention","text":"@user","username":"user"},
+				"!"
+			]}
+		}]}
+	}`)
+
+	var message Message
+	if err := json.Unmarshal(payload, &message); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if message.RichMessage == nil || len(message.RichMessage.Blocks) != 1 {
+		t.Fatalf("RichMessage = %#v", message.RichMessage)
+	}
+	text := message.RichMessage.Blocks[0].Text
+	if text == nil {
+		t.Fatal("rich-message block text is nil")
+	}
+	if text.Type != "rich_text" || text.PlainText() != "hello @user!" {
+		t.Fatalf("rich-message text = %#v, plain = %q", text, text.PlainText())
+	}
+
+	roundTrip, err := json.Marshal(message)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(roundTrip, &raw); err != nil {
+		t.Fatalf("round-trip json.Unmarshal() error = %v", err)
+	}
+	rich := raw["rich_message"].(map[string]interface{})
+	blocks := rich["blocks"].([]interface{})
+	blockText := blocks[0].(map[string]interface{})["text"].(map[string]interface{})
+	if _, ok := blockText["text"].([]interface{}); !ok {
+		t.Fatalf("round-trip nested text = %#v", blockText["text"])
+	}
+}
+
 func TestUserStringWith(t *testing.T) {
 	user := User{
 		ID:           0,

@@ -677,8 +677,9 @@ type RichMessageCell struct {
 	VAlign   string          `json:"valign,omitempty"`
 }
 
-// RichMessageText supports both rich-message text representations currently
-// emitted by Telegram: a JSON string and an object such as a mention.
+// RichMessageText supports the rich-message text representations emitted by
+// Telegram: a JSON string, an object such as a mention, or an array of rich
+// text fragments.
 type RichMessageText struct {
 	Type     string `json:"type,omitempty"`
 	Text     string `json:"text,omitempty"`
@@ -686,8 +687,8 @@ type RichMessageText struct {
 	raw      json.RawMessage
 }
 
-// UnmarshalJSON accepts either "plain text" or
-// {"type":"mention","text":"@name","username":"name"}.
+// UnmarshalJSON accepts plain text and nested rich-text objects/arrays. The
+// original representation is retained for lossless forwarding and logging.
 func (t *RichMessageText) UnmarshalJSON(data []byte) error {
 	if t == nil {
 		return errors.New("tgbotapi: cannot unmarshal rich message text into nil receiver")
@@ -698,22 +699,93 @@ func (t *RichMessageText) UnmarshalJSON(data []byte) error {
 	}
 	raw := append(json.RawMessage(nil), data...)
 	*t = RichMessageText{raw: raw}
-	if trimmed[0] == '"' {
+	switch trimmed[0] {
+	case '"':
 		return json.Unmarshal(trimmed, &t.Text)
+	case '{':
+		var value map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &value); err != nil {
+			return err
+		}
+		t.Type = richMessageStringField(value, "type")
+		t.Username = richMessageStringField(value, "username")
+		for _, field := range []string{"text", "children", "content", "value"} {
+			if nested, ok := value[field]; ok {
+				t.Text = flattenRichMessageText(nested, 0)
+				if t.Text != "" {
+					break
+				}
+			}
+		}
+		return nil
+	case '[':
+		t.Text = flattenRichMessageText(trimmed, 0)
+		return nil
+	default:
+		// Validate future scalar representations without making the complete
+		// getUpdates response fail merely because they carry no visible text.
+		var value interface{}
+		return json.Unmarshal(trimmed, &value)
 	}
-	type richMessageTextAlias struct {
-		Type     string `json:"type,omitempty"`
-		Text     string `json:"text,omitempty"`
-		Username string `json:"username,omitempty"`
+}
+
+func richMessageStringField(value map[string]json.RawMessage, field string) string {
+	raw, ok := value[field]
+	if !ok {
+		return ""
 	}
-	var value richMessageTextAlias
-	if err := json.Unmarshal(trimmed, &value); err != nil {
-		return err
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return ""
 	}
-	t.Type = value.Type
-	t.Text = value.Text
-	t.Username = value.Username
-	return nil
+	return text
+}
+
+// flattenRichMessageText extracts visible text from Telegram's nested rich
+// text fragments. Keep a depth limit so an unexpectedly deep payload cannot
+// consume unbounded stack space while polling updates.
+func flattenRichMessageText(data json.RawMessage, depth int) string {
+	if depth > 32 {
+		return ""
+	}
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return ""
+	}
+
+	switch trimmed[0] {
+	case '"':
+		var text string
+		if err := json.Unmarshal(trimmed, &text); err == nil {
+			return text
+		}
+	case '[':
+		var fragments []json.RawMessage
+		if err := json.Unmarshal(trimmed, &fragments); err != nil {
+			return ""
+		}
+		var text strings.Builder
+		for _, fragment := range fragments {
+			text.WriteString(flattenRichMessageText(fragment, depth+1))
+		}
+		return text.String()
+	case '{':
+		var value map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &value); err != nil {
+			return ""
+		}
+		for _, field := range []string{"text", "children", "content", "value"} {
+			if nested, ok := value[field]; ok {
+				if text := flattenRichMessageText(nested, depth+1); text != "" {
+					return text
+				}
+			}
+		}
+		if username := richMessageStringField(value, "username"); username != "" {
+			return "@" + strings.TrimPrefix(username, "@")
+		}
+	}
+	return ""
 }
 
 // MarshalJSON preserves the original Telegram representation when this value
