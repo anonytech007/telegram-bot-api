@@ -1,9 +1,62 @@
 package tgbotapi
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
+
+func TestRichMessageUnmarshal(t *testing.T) {
+	payload := []byte(`{
+		"message_id":23,
+		"date":1789033384,
+		"chat":{"id":-1004326400304,"type":"supergroup"},
+		"rich_message":{"blocks":[{
+			"type":"table",
+			"cells":[
+				[{"text":"👇点击下方进新群 速来👇","is_header":true,"align":"center","valign":"middle"}],
+				[{"text":{"type":"mention","text":"@jiso_NB","username":"jiso_NB"},"is_header":true}]
+			],
+			"caption":"⚠️本群即将注销 请尽快退出⚠️",
+			"is_bordered":true
+		}]}
+	}`)
+
+	var message Message
+	if err := json.Unmarshal(payload, &message); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if message.RichMessage == nil || len(message.RichMessage.Blocks) != 1 {
+		t.Fatalf("RichMessage = %#v", message.RichMessage)
+	}
+	block := message.RichMessage.Blocks[0]
+	if block.Type != "table" || block.Caption != "⚠️本群即将注销 请尽快退出⚠️" || !block.IsBordered {
+		t.Fatalf("block = %#v", block)
+	}
+	if got := block.Cells[0][0].Text.PlainText(); got != "👇点击下方进新群 速来👇" {
+		t.Fatalf("plain cell text = %q", got)
+	}
+	mention := block.Cells[1][0].Text
+	if mention.Type != "mention" || mention.Text != "@jiso_NB" || mention.Username != "jiso_NB" {
+		t.Fatalf("mention = %#v", mention)
+	}
+
+	roundTrip, err := json.Marshal(message)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(roundTrip, &raw); err != nil {
+		t.Fatalf("round-trip json.Unmarshal() error = %v", err)
+	}
+	rich := raw["rich_message"].(map[string]interface{})
+	blocks := rich["blocks"].([]interface{})
+	cells := blocks[0].(map[string]interface{})["cells"].([]interface{})
+	plainText := cells[0].([]interface{})[0].(map[string]interface{})["text"]
+	if plainText != "👇点击下方进新群 速来👇" {
+		t.Fatalf("round-trip plain text = %#v", plainText)
+	}
+}
 
 func TestUserStringWith(t *testing.T) {
 	user := User{

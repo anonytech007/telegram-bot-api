@@ -1,6 +1,7 @@
 package tgbotapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -445,6 +446,11 @@ type Message struct {
 	//
 	// optional
 	AuthorSignature string `json:"author_signature,omitempty"`
+	// RichMessage contains Telegram rich-content blocks such as tables.
+	// Rich messages may not populate the legacy Text or Caption fields.
+	//
+	// optional
+	RichMessage *RichMessage `json:"rich_message,omitempty"`
 	// Text is for text messages, the actual UTF-8 text of the message, 0-4096 characters;
 	//
 	// optional
@@ -643,9 +649,104 @@ type Message struct {
 	// login_url buttons are represented as ordinary url buttons.
 	//
 	// optional
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
-	ExternalReply json.RawMessage `json:"external_reply,omitempty"`
-	Quote         json.RawMessage `json:"quote,omitempty"`
+	ReplyMarkup   *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ExternalReply json.RawMessage       `json:"external_reply,omitempty"`
+	Quote         json.RawMessage       `json:"quote,omitempty"`
+}
+
+// RichMessage contains the structured blocks of a Telegram rich message.
+type RichMessage struct {
+	Blocks []RichMessageBlock `json:"blocks"`
+}
+
+// RichMessageBlock is one structured rich-message block. Table blocks use
+// Cells and may provide a Caption; Text is retained for text-like block types.
+type RichMessageBlock struct {
+	Type       string              `json:"type"`
+	Text       *RichMessageText    `json:"text,omitempty"`
+	Cells      [][]RichMessageCell `json:"cells,omitempty"`
+	Caption    string              `json:"caption,omitempty"`
+	IsBordered bool                `json:"is_bordered,omitempty"`
+}
+
+// RichMessageCell is one cell inside a rich-message table block.
+type RichMessageCell struct {
+	Text     RichMessageText `json:"text"`
+	IsHeader bool            `json:"is_header,omitempty"`
+	Align    string          `json:"align,omitempty"`
+	VAlign   string          `json:"valign,omitempty"`
+}
+
+// RichMessageText supports both rich-message text representations currently
+// emitted by Telegram: a JSON string and an object such as a mention.
+type RichMessageText struct {
+	Type     string `json:"type,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Username string `json:"username,omitempty"`
+	raw      json.RawMessage
+}
+
+// UnmarshalJSON accepts either "plain text" or
+// {"type":"mention","text":"@name","username":"name"}.
+func (t *RichMessageText) UnmarshalJSON(data []byte) error {
+	if t == nil {
+		return errors.New("tgbotapi: cannot unmarshal rich message text into nil receiver")
+	}
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return errors.New("tgbotapi: empty rich message text")
+	}
+	raw := append(json.RawMessage(nil), data...)
+	*t = RichMessageText{raw: raw}
+	if trimmed[0] == '"' {
+		return json.Unmarshal(trimmed, &t.Text)
+	}
+	type richMessageTextAlias struct {
+		Type     string `json:"type,omitempty"`
+		Text     string `json:"text,omitempty"`
+		Username string `json:"username,omitempty"`
+	}
+	var value richMessageTextAlias
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return err
+	}
+	t.Type = value.Type
+	t.Text = value.Text
+	t.Username = value.Username
+	return nil
+}
+
+// MarshalJSON preserves the original Telegram representation when this value
+// came from an update, so forwarding/logging an Update does not rewrite a
+// string cell into an object cell.
+func (t RichMessageText) MarshalJSON() ([]byte, error) {
+	if len(t.raw) != 0 {
+		return t.raw, nil
+	}
+	if t.Type == "" && t.Username == "" {
+		return json.Marshal(t.Text)
+	}
+	type richMessageTextAlias struct {
+		Type     string `json:"type,omitempty"`
+		Text     string `json:"text,omitempty"`
+		Username string `json:"username,omitempty"`
+	}
+	return json.Marshal(richMessageTextAlias{
+		Type:     t.Type,
+		Text:     t.Text,
+		Username: t.Username,
+	})
+}
+
+// PlainText returns the visible text represented by the rich text value.
+func (t RichMessageText) PlainText() string {
+	if t.Text != "" {
+		return t.Text
+	}
+	if t.Username != "" {
+		return "@" + strings.TrimPrefix(t.Username, "@")
+	}
+	return ""
 }
 
 // Time converts the message timestamp into a Time.
