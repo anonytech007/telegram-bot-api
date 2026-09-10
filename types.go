@@ -665,7 +665,7 @@ type RichMessageBlock struct {
 	Type       string              `json:"type"`
 	Text       *RichMessageText    `json:"text,omitempty"`
 	Cells      [][]RichMessageCell `json:"cells,omitempty"`
-	Caption    string              `json:"caption,omitempty"`
+	Caption    *RichMessageText    `json:"caption,omitempty"`
 	IsBordered bool                `json:"is_bordered,omitempty"`
 }
 

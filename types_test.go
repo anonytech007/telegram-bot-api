@@ -30,7 +30,7 @@ func TestRichMessageUnmarshal(t *testing.T) {
 		t.Fatalf("RichMessage = %#v", message.RichMessage)
 	}
 	block := message.RichMessage.Blocks[0]
-	if block.Type != "table" || block.Caption != "⚠️本群即将注销 请尽快退出⚠️" || !block.IsBordered {
+	if block.Type != "table" || block.Caption == nil || block.Caption.PlainText() != "⚠️本群即将注销 请尽快退出⚠️" || !block.IsBordered {
 		t.Fatalf("block = %#v", block)
 	}
 	if got := block.Cells[0][0].Text.PlainText(); got != "👇点击下方进新群 速来👇" {
@@ -65,6 +65,7 @@ func TestRichMessageUnmarshalNestedTextFragments(t *testing.T) {
 		"chat":{"id":-1004326400304,"type":"supergroup"},
 		"rich_message":{"blocks":[{
 			"type":"text",
+			"caption":{"type":"rich_text","text":["caption ",{"type":"bold","text":"text"}]},
 			"text":{"type":"rich_text","text":[
 				{"type":"plain","text":"hello "},
 				{"type":"mention","text":"@user","username":"user"},
@@ -87,6 +88,10 @@ func TestRichMessageUnmarshalNestedTextFragments(t *testing.T) {
 	if text.Type != "rich_text" || text.PlainText() != "hello @user!" {
 		t.Fatalf("rich-message text = %#v, plain = %q", text, text.PlainText())
 	}
+	caption := message.RichMessage.Blocks[0].Caption
+	if caption == nil || caption.Type != "rich_text" || caption.PlainText() != "caption text" {
+		t.Fatalf("rich-message caption = %#v", caption)
+	}
 
 	roundTrip, err := json.Marshal(message)
 	if err != nil {
@@ -101,6 +106,10 @@ func TestRichMessageUnmarshalNestedTextFragments(t *testing.T) {
 	blockText := blocks[0].(map[string]interface{})["text"].(map[string]interface{})
 	if _, ok := blockText["text"].([]interface{}); !ok {
 		t.Fatalf("round-trip nested text = %#v", blockText["text"])
+	}
+	blockCaption := blocks[0].(map[string]interface{})["caption"].(map[string]interface{})
+	if _, ok := blockCaption["text"].([]interface{}); !ok {
+		t.Fatalf("round-trip nested caption = %#v", blockCaption["text"])
 	}
 }
 
