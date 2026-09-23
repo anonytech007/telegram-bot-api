@@ -932,6 +932,10 @@ type MessageEntity struct {
 	//
 	// optional
 	Language string `json:"language,omitempty"`
+	// CustomEmojiID for “custom_emoji” only, unique identifier of the custom emoji
+	//
+	// optional
+	CustomEmojiID string `json:"custom_emoji_id,omitempty"`
 }
 
 // ParseURL attempts to parse a URL contained within a MessageEntity.
